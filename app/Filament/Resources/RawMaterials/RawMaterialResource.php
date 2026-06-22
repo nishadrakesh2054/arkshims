@@ -18,7 +18,7 @@ class RawMaterialResource extends Resource
 {
     protected static ?string $model = RawMaterial::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCube;
 
     protected static ?string $navigationLabel = 'Raw Materials';
 

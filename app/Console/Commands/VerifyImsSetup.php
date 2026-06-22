@@ -2,6 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Dispatch;
+use App\Models\FinishedGoodsBatch;
+use App\Models\FinishedGoodsTransaction;
 use App\Models\InventoryTransaction;
 use App\Models\MaterialReceipt;
 use App\Models\RawMaterial;
@@ -31,6 +34,9 @@ class VerifyImsSetup extends Command
             ['Material Receipts', MaterialReceipt::query()->count()],
             ['IN Transactions', InventoryTransaction::query()->where('type', 'IN')->count()],
             ['OUT Transactions', InventoryTransaction::query()->where('type', 'OUT')->count()],
+            ['FG Batches', FinishedGoodsBatch::query()->count()],
+            ['FG Transactions', FinishedGoodsTransaction::query()->count()],
+            ['Dispatches', Dispatch::query()->count()],
         ]);
 
         $this->newLine();
@@ -91,9 +97,14 @@ class VerifyImsSetup extends Command
             '/admin/raw-materials',
             '/admin/material-receipts',
             '/admin/stock-ledger',
+            '/admin/finished-goods-ledger',
+            '/admin/stock-adjustments',
             '/admin/skus',
             '/admin/repackaging-formulas',
             '/admin/repackaging-batches',
+            '/admin/dispatches',
+            '/admin/stock-dashboard',
+            '/admin/audit-logs',
         ] as $path) {
             $this->line("  • {$baseUrl}{$path}");
         }
@@ -119,8 +130,26 @@ class VerifyImsSetup extends Command
             $expected = $in - $out + $adjustment;
 
             if (abs($material->current_stock - $expected) >= 0.0001) {
-                $stockErrors[] = "{$material->name}: current={$material->current_stock}, expected={$expected}";
+                $stockErrors[] = "Raw {$material->name}: current={$material->current_stock}, expected={$expected}";
             }
+        }
+
+        foreach (Sku::query()->get() as $sku) {
+            $in = (int) $sku->finishedGoodsTransactions()->where('type', 'IN')->sum('qty');
+            $out = (int) $sku->finishedGoodsTransactions()->where('type', 'OUT')->sum('qty');
+            $adjustment = (int) $sku->finishedGoodsTransactions()->where('type', 'ADJUSTMENT')->sum('qty');
+            $expected = $in - $out + $adjustment;
+
+            if ($sku->current_stock !== $expected) {
+                $stockErrors[] = "FG {$sku->name}: current={$sku->current_stock}, expected={$expected}";
+            }
+        }
+
+        $missingFgBatches = RepackagingBatch::query()->whereDoesntHave('finishedGoodsBatch')->count();
+
+        if ($missingFgBatches > 0) {
+            $this->newLine();
+            $this->components->warn("{$missingFgBatches} repackaging batch(es) missing finished goods records. Run: php artisan ims:backfill-finished-goods");
         }
 
         if ($stockErrors !== []) {

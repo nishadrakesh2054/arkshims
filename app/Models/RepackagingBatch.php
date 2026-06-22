@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class RepackagingBatch extends Model
 {
+    use Auditable;
     use HasFactory;
 
     protected $fillable = [
@@ -71,6 +73,23 @@ class RepackagingBatch extends Model
                     'reference_id' => $batch->id,
                 ]);
             }
+
+            $finishedGoodsBatch = FinishedGoodsBatch::query()->create([
+                'repackaging_batch_id' => $batch->id,
+                'sku_id' => $batch->sku_id,
+                'batch_no' => $batch->batch_no,
+                'quantity' => $batch->quantity,
+                'produced_date' => $batch->repackaged_date,
+            ]);
+
+            FinishedGoodsTransaction::query()->create([
+                'sku_id' => $batch->sku_id,
+                'type' => 'IN',
+                'qty' => $batch->quantity,
+                'reference_type' => 'repackaging_batch',
+                'reference_id' => $batch->id,
+                'finished_goods_batch_id' => $finishedGoodsBatch->id,
+            ]);
         });
 
         static::deleting(function (RepackagingBatch $batch): void {
@@ -78,11 +97,25 @@ class RepackagingBatch extends Model
                 ->where('reference_type', 'repackaging_batch')
                 ->where('reference_id', $batch->id)
                 ->delete();
+
+            FinishedGoodsTransaction::query()
+                ->where('reference_type', 'repackaging_batch')
+                ->where('reference_id', $batch->id)
+                ->delete();
+
+            FinishedGoodsBatch::query()
+                ->where('repackaging_batch_id', $batch->id)
+                ->delete();
         });
     }
 
     public function sku(): BelongsTo
     {
         return $this->belongsTo(Sku::class);
+    }
+
+    public function finishedGoodsBatch()
+    {
+        return $this->hasOne(FinishedGoodsBatch::class);
     }
 }

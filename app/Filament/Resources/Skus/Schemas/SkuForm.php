@@ -65,6 +65,12 @@ class SkuForm
                 Toggle::make('is_active')
                     ->label('Is Active')
                     ->default(true),
+                TextInput::make('minimum_stock')
+                    ->label('Minimum FG Stock')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(0)
+                    ->required(),
             ]);
     }
 }

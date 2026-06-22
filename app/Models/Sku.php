@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\StockBalance;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +21,7 @@ class Sku extends Model
         'packaging_type',
         'sku_code',
         'is_active',
+        'minimum_stock',
     ];
 
     /**
@@ -29,7 +32,20 @@ class Sku extends Model
         return [
             'weight' => 'float',
             'is_active' => 'boolean',
+            'minimum_stock' => 'integer',
         ];
+    }
+
+    /**
+     * @param  Builder<Sku>  $query
+     * @return Builder<Sku>
+     */
+    public function scopeWithCurrentStock(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'skus.*',
+            'computed_current_stock' => StockBalance::skuStockSubquery(),
+        ]);
     }
 
     public function productCategory(): BelongsTo
@@ -55,5 +71,50 @@ class Sku extends Model
     public function repackagingBatches()
     {
         return $this->hasMany(RepackagingBatch::class);
+    }
+
+    public function finishedGoodsBatches()
+    {
+        return $this->hasMany(FinishedGoodsBatch::class);
+    }
+
+    public function finishedGoodsTransactions()
+    {
+        return $this->hasMany(FinishedGoodsTransaction::class);
+    }
+
+    public function getCurrentStockAttribute(): int
+    {
+        if (array_key_exists('computed_current_stock', $this->attributes)) {
+            return (int) $this->attributes['computed_current_stock'];
+        }
+
+        $in = $this->finishedGoodsTransactions()
+            ->where('type', 'IN')
+            ->sum('qty');
+
+        $out = $this->finishedGoodsTransactions()
+            ->where('type', 'OUT')
+            ->sum('qty');
+
+        $adjustment = $this->finishedGoodsTransactions()
+            ->where('type', 'ADJUSTMENT')
+            ->sum('qty');
+
+        return (int) $in - (int) $out + (int) $adjustment;
+    }
+
+    public function getIsLowStockAttribute(): bool
+    {
+        if ($this->minimum_stock <= 0) {
+            return false;
+        }
+
+        return $this->current_stock < $this->minimum_stock;
+    }
+
+    public static function countLowStock(): int
+    {
+        return StockBalance::skuLowStockCount();
     }
 }

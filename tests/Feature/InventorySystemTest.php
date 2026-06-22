@@ -6,6 +6,7 @@ use App\Models\RawMaterial;
 use App\Models\RepackagingBatch;
 use App\Models\RepackagingFormula;
 use App\Models\Sku;
+use App\Models\StockAdjustment;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -96,6 +97,32 @@ it('blocks repackaging when stock is insufficient', function (): void {
     ]))->toThrow(ValidationException::class);
 });
 
+it('creates stock adjustment for raw materials', function (): void {
+    $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->first();
+    $stockBefore = $coffee->current_stock;
+
+    $adjustment = StockAdjustment::query()->create([
+        'stock_type' => 'raw_material',
+        'raw_material_id' => $coffee->id,
+        'direction' => 'decrease',
+        'qty' => 10,
+        'reason' => 'Physical count variance',
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore - 10)
+        ->and(
+            InventoryTransaction::query()
+                ->where('type', 'ADJUSTMENT')
+                ->where('reference_type', 'stock_adjustment')
+                ->where('reference_id', $adjustment->id)
+                ->exists()
+        )->toBeTrue();
+
+    $adjustment->delete();
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore);
+});
+
 it('restores stock when a repackaging batch is deleted', function (): void {
     $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
     $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->first();
@@ -127,4 +154,6 @@ it('allows admin to access key filament pages', function (string $path): void {
     'skus' => '/admin/skus',
     'formulas' => '/admin/repackaging-formulas',
     'repackaging batches' => '/admin/repackaging-batches',
+    'stock adjustments' => '/admin/stock-adjustments',
+    'audit log' => '/admin/audit-logs',
 ]);

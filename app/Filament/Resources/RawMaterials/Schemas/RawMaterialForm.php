@@ -26,6 +26,13 @@ class RawMaterialForm
                     ->step(0.0001)
                     ->default(0)
                     ->required(),
+                TextInput::make('cost_per_unit')
+                    ->label('Cost Per Base Unit')
+                    ->numeric()
+                    ->step(0.0001)
+                    ->default(0)
+                    ->prefix('₹')
+                    ->required(),
             ]);
     }
 }

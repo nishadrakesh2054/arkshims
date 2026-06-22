@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Brand;
-use App\Models\InventoryTransaction;
+use App\Models\Dispatch;
+use App\Models\DispatchItem;
+use App\Models\FinishedGoodsBatch;
 use App\Models\MaterialReceipt;
 use App\Models\ProductCategory;
 use App\Models\RawMaterial;
@@ -229,6 +231,27 @@ class ImsSampleDataSeeder extends Seeder
                 'quantity' => 20,
                 'repackaged_date' => now()->toDateString(),
                 'remarks' => '12x50gm box run',
+            ]);
+        }
+
+        if (Dispatch::query()->doesntExist()) {
+            $pouch50 = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+            $fgBatch = FinishedGoodsBatch::query()
+                ->where('sku_id', $pouch50->id)
+                ->first();
+
+            $dispatch = Dispatch::query()->create([
+                'dispatch_no' => 'DISP-001',
+                'customer_name' => 'Metro Retail Store',
+                'dispatched_date' => now()->toDateString(),
+                'remarks' => 'Sample dispatch',
+            ]);
+
+            DispatchItem::query()->create([
+                'dispatch_id' => $dispatch->id,
+                'sku_id' => $pouch50->id,
+                'finished_goods_batch_id' => $fgBatch?->id,
+                'quantity' => 50,
             ]);
         }
     }

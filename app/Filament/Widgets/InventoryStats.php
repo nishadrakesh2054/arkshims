@@ -2,34 +2,48 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\InventoryTransaction;
-use App\Models\MaterialReceipt;
+use App\Filament\Resources\RawMaterials\RawMaterialResource;
+use App\Filament\Resources\Skus\SkuResource;
+use App\Filament\Resources\StockAdjustments\StockAdjustmentResource;
 use App\Models\RawMaterial;
+use App\Models\Sku;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class InventoryStats extends StatsOverviewWidget
 {
+    protected static ?int $sort = 1;
+
     protected function getStats(): array
     {
+        $fgTotal = Sku::query()
+            ->withCurrentStock()
+            ->get()
+            ->sum(fn (Sku $sku): int => $sku->current_stock);
+
+        $lowStock = RawMaterial::countLowStock() + Sku::countLowStock();
+
         return [
             Stat::make('Raw Materials', RawMaterial::query()->count())
-                ->description('Total materials in inventory')
+                ->description('Active catalog items')
                 ->descriptionIcon(Heroicon::OutlinedCube)
-                ->color('primary'),
-            Stat::make('Stock Entries', MaterialReceipt::query()->count())
-                ->description('Total material receipts')
-                ->descriptionIcon(Heroicon::OutlinedArchiveBox)
-                ->color('success'),
-            Stat::make('Stock Value', '—')
-                ->description('Coming soon')
+                ->color('primary')
+                ->url(RawMaterialResource::getUrl()),
+            Stat::make('Stock Value', '₹'.number_format(RawMaterial::totalStockValue(), 2))
+                ->description('Raw inventory valuation')
                 ->descriptionIcon(Heroicon::OutlinedBanknotes)
-                ->color('gray'),
-            Stat::make('Low Stock Items', RawMaterial::countLowStock())
-                ->description('At or below minimum stock')
+                ->color('success'),
+            Stat::make('FG On Hand', number_format($fgTotal))
+                ->description('Finished goods units')
+                ->descriptionIcon(Heroicon::OutlinedShoppingBag)
+                ->color('info')
+                ->url(SkuResource::getUrl()),
+            Stat::make('Low Stock Alerts', (string) $lowStock)
+                ->description('Requires attention')
                 ->descriptionIcon(Heroicon::OutlinedExclamationTriangle)
-                ->color('danger'),
+                ->color($lowStock > 0 ? 'danger' : 'success')
+                ->url(StockAdjustmentResource::getUrl('create')),
         ];
     }
 }
