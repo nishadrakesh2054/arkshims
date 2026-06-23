@@ -42,6 +42,32 @@ class StockBalance
         return '('.self::rawMaterialStockSubquery()->toSql().')';
     }
 
+    public static function rawMaterialStockFor(int $rawMaterialId): float
+    {
+        return (float) DB::table('inventory_transactions')
+            ->where('raw_material_id', $rawMaterialId)
+            ->selectRaw("COALESCE(SUM(CASE
+                WHEN type = 'IN' THEN base_qty
+                WHEN type = 'OUT' THEN -base_qty
+                WHEN type = 'ADJUSTMENT' THEN base_qty
+                ELSE 0
+            END), 0) as stock")
+            ->value('stock');
+    }
+
+    public static function skuStockFor(int $skuId): int
+    {
+        return (int) DB::table('finished_goods_transactions')
+            ->where('sku_id', $skuId)
+            ->selectRaw("COALESCE(SUM(CASE
+                WHEN type = 'IN' THEN qty
+                WHEN type = 'OUT' THEN -qty
+                WHEN type = 'ADJUSTMENT' THEN qty
+                ELSE 0
+            END), 0) as stock")
+            ->value('stock');
+    }
+
     public static function rawMaterialLowStockCount(): int
     {
         return (int) DB::table('raw_materials')

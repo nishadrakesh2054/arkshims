@@ -27,7 +27,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->brandName('IMS Pro')
+            ->brandName('Arksh IMS ')
             ->colors([
                 'primary' => Color::Slate,
                 'success' => Color::Emerald,

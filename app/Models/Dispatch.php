@@ -3,9 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Support\InventoryGuard;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\DB;
 
 class Dispatch extends Model
 {
@@ -44,46 +45,22 @@ class Dispatch extends Model
         });
     }
 
+    public function delete(): ?bool
+    {
+        if (DB::transactionLevel() > 0) {
+            return parent::delete();
+        }
+
+        return InventoryGuard::transaction(function (): ?bool {
+            return parent::delete();
+        });
+    }
+
     /**
-     * @param  array<int, array{sku_id: int, quantity: int, finished_goods_batch_id?: int|null}>  $items
+     * @param  array<int, array{sku_id?: int, quantity?: int, finished_goods_batch_id?: int|null}>  $items
      */
     public static function validateStockForItems(array $items): void
     {
-        $requiredBySku = [];
-
-        foreach ($items as $item) {
-            $skuId = (int) ($item['sku_id'] ?? 0);
-            $qty = (int) ($item['quantity'] ?? 0);
-
-            if ($skuId === 0 || $qty <= 0) {
-                continue;
-            }
-
-            $requiredBySku[$skuId] = ($requiredBySku[$skuId] ?? 0) + $qty;
-
-            if (! empty($item['finished_goods_batch_id'])) {
-                $batch = FinishedGoodsBatch::query()->find($item['finished_goods_batch_id']);
-
-                if ($batch && $batch->available_qty < $qty) {
-                    throw ValidationException::withMessages([
-                        'items' => [
-                            "Insufficient batch stock for {$batch->batch_no}. Required: {$qty}, available: {$batch->available_qty}.",
-                        ],
-                    ]);
-                }
-            }
-        }
-
-        foreach ($requiredBySku as $skuId => $requiredQty) {
-            $sku = Sku::query()->findOrFail($skuId);
-
-            if ($sku->current_stock < $requiredQty) {
-                throw ValidationException::withMessages([
-                    'items' => [
-                        "Insufficient finished goods stock for {$sku->name}. Required: {$requiredQty}, available: {$sku->current_stock}.",
-                    ],
-                ]);
-            }
-        }
+        InventoryGuard::assertDispatchItemsStock($items);
     }
 }

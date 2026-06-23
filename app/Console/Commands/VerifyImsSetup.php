@@ -82,11 +82,11 @@ class VerifyImsSetup extends Command
         $this->table(['Batch', 'SKU', 'Qty', 'Date'], $batchRows);
 
         $baseUrl = rtrim((string) $this->option('url'), '/');
-        $admin = User::query()->where('email', 'admin@ims.test')->first();
+        $admin = User::query()->first();
 
         if ($admin) {
             $this->newLine();
-            $this->components->info('Admin Login: admin@ims.test / password');
+            $this->components->info("Admin Login: {$admin->email}");
         }
 
         $this->newLine();
@@ -165,6 +165,9 @@ class VerifyImsSetup extends Command
 
         $this->newLine();
         $this->components->success('All stock calculations verified (current stock matches IN − OUT + ADJUSTMENT).');
+
+        $this->newLine();
+        $this->components->info('Run before go-live: php artisan ims:go-live-check');
 
         return self::SUCCESS;
     }

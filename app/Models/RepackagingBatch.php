@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\PerformsAtomicInventory;
+use App\Support\InventoryGuard;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +14,7 @@ class RepackagingBatch extends Model
 {
     use Auditable;
     use HasFactory;
+    use PerformsAtomicInventory;
 
     protected $fillable = [
         'sku_id',
@@ -37,7 +40,6 @@ class RepackagingBatch extends Model
         static::creating(function (RepackagingBatch $batch): void {
             $formulas = RepackagingFormula::query()
                 ->where('sku_id', $batch->sku_id)
-                ->with('rawMaterial')
                 ->get();
 
             if ($formulas->isEmpty()) {
@@ -49,13 +51,11 @@ class RepackagingBatch extends Model
             foreach ($formulas as $formula) {
                 $consumption = (float) $formula->base_qty * (int) $batch->quantity;
 
-                if ($formula->rawMaterial->current_stock < $consumption) {
-                    throw ValidationException::withMessages([
-                        'quantity' => [
-                            "Insufficient stock for {$formula->rawMaterial->name}. Required: {$consumption}, available: {$formula->rawMaterial->current_stock}.",
-                        ],
-                    ]);
-                }
+                InventoryGuard::assertRawMaterialStockAvailable(
+                    $formula->raw_material_id,
+                    $consumption,
+                    'quantity',
+                );
             }
         });
 

@@ -3,15 +3,17 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\PerformsAtomicInventory;
+use App\Support\InventoryGuard;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Validation\ValidationException;
 
 class StockAdjustment extends Model
 {
     use Auditable;
     use HasFactory;
+    use PerformsAtomicInventory;
 
     protected $fillable = [
         'stock_type',
@@ -41,29 +43,19 @@ class StockAdjustment extends Model
 
             if ($adjustment->direction === 'decrease') {
                 if ($adjustment->stock_type === 'raw_material') {
-                    $stock = RawMaterial::query()
-                        ->withCurrentStock()
-                        ->find($adjustment->raw_material_id)
-                        ?->current_stock ?? 0;
-
-                    if ($stock < (float) $adjustment->qty) {
-                        throw ValidationException::withMessages([
-                            'qty' => "Insufficient raw material stock. Available: {$stock}",
-                        ]);
-                    }
+                    InventoryGuard::assertRawMaterialStockAvailable(
+                        (int) $adjustment->raw_material_id,
+                        (float) $adjustment->qty,
+                        'qty',
+                    );
                 }
 
                 if ($adjustment->stock_type === 'finished_goods') {
-                    $stock = Sku::query()
-                        ->withCurrentStock()
-                        ->find($adjustment->sku_id)
-                        ?->current_stock ?? 0;
-
-                    if ($stock < (int) $adjustment->qty) {
-                        throw ValidationException::withMessages([
-                            'qty' => "Insufficient finished goods stock. Available: {$stock}",
-                        ]);
-                    }
+                    InventoryGuard::assertSkuStockAvailable(
+                        (int) $adjustment->sku_id,
+                        (int) $adjustment->qty,
+                        'qty',
+                    );
                 }
             }
         });

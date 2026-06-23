@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\PerformsAtomicInventory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -10,6 +11,7 @@ class MaterialReceipt extends Model
 {
     use Auditable;
     use HasFactory;
+    use PerformsAtomicInventory;
 
     protected $fillable = ['raw_material_id', 'supplier_id', 'batch_no', 'qty', 'unit_id', 'base_qty', 'received_date', 'remarks'];
 
@@ -53,6 +55,15 @@ class MaterialReceipt extends Model
                 ->where('reference_id', $receipt->id)
                 ->delete();
         });
+    }
+
+    protected function shouldSaveInventoryAtomically(): bool
+    {
+        if (! $this->exists) {
+            return true;
+        }
+
+        return $this->isDirty(['qty', 'unit_id', 'raw_material_id']);
     }
 
     public function rawMaterial()

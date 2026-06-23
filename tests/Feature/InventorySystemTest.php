@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\Dispatch;
+use App\Models\DispatchItem;
+use App\Models\FinishedGoodsTransaction;
 use App\Models\InventoryTransaction;
 use App\Models\MaterialReceipt;
 use App\Models\RawMaterial;
@@ -16,7 +19,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     $this->seed(DatabaseSeeder::class);
-    $this->admin = User::query()->where('email', 'admin@ims.test')->first();
+    $this->admin = User::query()->firstOrFail();
 });
 
 it('seeds sample data for all modules', function (): void {
@@ -83,7 +86,7 @@ it('deducts correct raw material per packaging type on repackaging', function (s
                 ->latest('id')
                 ->first()
                 ->base_qty
-        )->toBe($expectedConsumption);
+        )->toEqualWithDelta($expectedConsumption, 0.0001);
 })->with('packaging types');
 
 it('blocks repackaging when stock is insufficient', function (): void {
@@ -123,6 +126,78 @@ it('creates stock adjustment for raw materials', function (): void {
     expect($coffee->fresh()->current_stock)->toBe($stockBefore);
 });
 
+it('creates FG OUT when dispatching finished goods', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'TEST-DISP-001',
+        'customer_name' => 'Walk-in Customer',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 10,
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore - 10)
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('type', 'OUT')
+                ->where('reference_type', 'dispatch')
+                ->where('reference_id', $dispatch->id)
+                ->first()
+                ->qty
+        )->toBe(10);
+});
+
+it('blocks dispatch when finished goods stock is insufficient', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'TEST-DISP-FAIL',
+        'customer_name' => 'Test Customer',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    expect(fn () => DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 9_999_999,
+    ]))->toThrow(ValidationException::class);
+});
+
+it('restores FG stock when a dispatch is deleted', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'TEST-DISP-DELETE',
+        'customer_name' => 'Test Customer',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 5,
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore - 5);
+
+    $dispatch->delete();
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore)
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('reference_type', 'dispatch')
+                ->where('reference_id', $dispatch->id)
+                ->exists()
+        )->toBeFalse();
+});
+
 it('restores stock when a repackaging batch is deleted', function (): void {
     $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
     $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->first();
@@ -155,5 +230,6 @@ it('allows admin to access key filament pages', function (string $path): void {
     'formulas' => '/admin/repackaging-formulas',
     'repackaging batches' => '/admin/repackaging-batches',
     'stock adjustments' => '/admin/stock-adjustments',
+    'dispatches' => '/admin/dispatches',
     'audit log' => '/admin/audit-logs',
 ]);

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\PerformsAtomicInventory;
+use App\Support\InventoryGuard;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class DispatchItem extends Model
 {
     use HasFactory;
+    use PerformsAtomicInventory;
 
     protected $fillable = [
         'dispatch_id',
@@ -29,6 +32,28 @@ class DispatchItem extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (DispatchItem $item): void {
+            $existingQty = 0;
+
+            if ($item->dispatch_id) {
+                $existingQty = (int) DispatchItem::query()
+                    ->where('dispatch_id', $item->dispatch_id)
+                    ->where('sku_id', $item->sku_id)
+                    ->sum('quantity');
+            }
+
+            $requiredQty = $existingQty + (int) $item->quantity;
+
+            if (! empty($item->finished_goods_batch_id)) {
+                InventoryGuard::assertFinishedGoodsBatchStockAvailable(
+                    (int) $item->finished_goods_batch_id,
+                    (int) $item->quantity,
+                );
+            }
+
+            InventoryGuard::assertSkuStockAvailable((int) $item->sku_id, $requiredQty);
+        });
+
         static::created(function (DispatchItem $item): void {
             FinishedGoodsTransaction::query()->create([
                 'sku_id' => $item->sku_id,
