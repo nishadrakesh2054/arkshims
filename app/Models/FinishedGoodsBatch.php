@@ -13,6 +13,7 @@ class FinishedGoodsBatch extends Model
 
     protected $fillable = [
         'repackaging_batch_id',
+        'finished_goods_receipt_id',
         'sku_id',
         'batch_no',
         'quantity',
@@ -33,6 +34,11 @@ class FinishedGoodsBatch extends Model
     public function repackagingBatch(): BelongsTo
     {
         return $this->belongsTo(RepackagingBatch::class);
+    }
+
+    public function finishedGoodsReceipt(): BelongsTo
+    {
+        return $this->belongsTo(FinishedGoodsReceipt::class);
     }
 
     public function sku(): BelongsTo

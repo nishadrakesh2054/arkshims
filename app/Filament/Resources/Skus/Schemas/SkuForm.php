@@ -65,6 +65,13 @@ class SkuForm
                 Toggle::make('is_active')
                     ->label('Is Active')
                     ->default(true),
+                TextInput::make('packs_per_carton')
+                    ->label('Packs per Carton')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->helperText('For chocolate / carton products (e.g. 20). Leave empty for coffee pouch-only SKUs.')
+                    ->nullable(),
                 TextInput::make('minimum_stock')
                     ->label('Minimum FG Stock')
                     ->numeric()

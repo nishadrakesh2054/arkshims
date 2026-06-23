@@ -6,6 +6,7 @@ use App\Models\Brand;
 use App\Models\Dispatch;
 use App\Models\DispatchItem;
 use App\Models\FinishedGoodsBatch;
+use App\Models\FinishedGoodsReceipt;
 use App\Models\MaterialReceipt;
 use App\Models\ProductCategory;
 use App\Models\RawMaterial;
@@ -252,6 +253,106 @@ class ImsSampleDataSeeder extends Seeder
                 'sku_id' => $pouch50->id,
                 'finished_goods_batch_id' => $fgBatch?->id,
                 'quantity' => 50,
+            ]);
+        }
+
+        $chocolateCategory = ProductCategory::query()->firstOrCreate(
+            ['code' => 'CHOCOLATE'],
+            ['name' => 'Chocolate'],
+        );
+
+        $luxuryChocolate = Brand::query()->firstOrCreate(
+            ['name' => 'Luxury Chocolate', 'product_category_id' => $chocolateCategory->id],
+        );
+
+        $chocolateSkus = [
+            [
+                'sku_code' => 'SKU-CH-VAN-400',
+                'name' => 'Luxury Chocolate Vanilla 400gm Pack',
+                'weight' => 400,
+                'packaging_type' => 'Pack',
+            ],
+            [
+                'sku_code' => 'SKU-CH-STB-500',
+                'name' => 'Luxury Chocolate Strawberry 500gm Pack',
+                'weight' => 500,
+                'packaging_type' => 'Pack',
+            ],
+            [
+                'sku_code' => 'SKU-CH-COC-500',
+                'name' => 'Luxury Chocolate Coconut 500gm Pack',
+                'weight' => 500,
+                'packaging_type' => 'Pack',
+            ],
+        ];
+
+        foreach ($chocolateSkus as $definition) {
+            Sku::query()->updateOrCreate(
+                ['sku_code' => $definition['sku_code']],
+                [
+                    'name' => $definition['name'],
+                    'product_category_id' => $chocolateCategory->id,
+                    'brand_id' => $luxuryChocolate->id,
+                    'weight' => $definition['weight'],
+                    'unit_id' => $gm->id,
+                    'packaging_type' => $definition['packaging_type'],
+                    'packs_per_carton' => 20,
+                    'is_active' => true,
+                ],
+            );
+        }
+
+        $vanillaPack = Sku::query()->where('sku_code', 'SKU-CH-VAN-400')->firstOrFail();
+        $coconutPack = Sku::query()->where('sku_code', 'SKU-CH-COC-500')->firstOrFail();
+
+        if (FinishedGoodsReceipt::query()->doesntExist()) {
+            FinishedGoodsReceipt::query()->create([
+                'receipt_no' => 'FG-VAN-2026-001',
+                'sku_id' => $vanillaPack->id,
+                'supplier_id' => $supplierItaly->id,
+                'cartons_count' => 20,
+                'packs_per_carton' => 20,
+                'carton_prefix' => 'VAN',
+                'received_date' => now()->subDays(3)->toDateString(),
+                'remarks' => '20 cartons × 20 packs vanilla chocolate',
+            ]);
+
+            FinishedGoodsReceipt::query()->create([
+                'receipt_no' => 'FG-COC-2026-001',
+                'sku_id' => $coconutPack->id,
+                'supplier_id' => $supplierItaly->id,
+                'cartons_count' => 32,
+                'packs_per_carton' => 20,
+                'carton_prefix' => 'COC',
+                'received_date' => now()->subDays(2)->toDateString(),
+                'remarks' => '32 cartons × 20 packs coconut chocolate',
+            ]);
+        }
+
+        if (! Dispatch::query()->where('dispatch_no', 'DISP-CH-001')->exists()) {
+            $coconutCarton = FinishedGoodsBatch::query()
+                ->where('sku_id', $coconutPack->id)
+                ->where('batch_no', 'COC-C001')
+                ->first();
+
+            $chocolateDispatch = Dispatch::query()->create([
+                'dispatch_no' => 'DISP-CH-001',
+                'customer_name' => 'Sweet Treats Distributor',
+                'dispatched_date' => now()->toDateString(),
+                'remarks' => '5 loose packs + 1 whole carton coconut',
+            ]);
+
+            DispatchItem::query()->create([
+                'dispatch_id' => $chocolateDispatch->id,
+                'sku_id' => $coconutPack->id,
+                'quantity' => 5,
+            ]);
+
+            DispatchItem::query()->create([
+                'dispatch_id' => $chocolateDispatch->id,
+                'sku_id' => $coconutPack->id,
+                'finished_goods_batch_id' => $coconutCarton?->id,
+                'quantity' => 20,
             ]);
         }
     }

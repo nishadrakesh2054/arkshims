@@ -102,6 +102,7 @@ class VerifyImsSetup extends Command
             '/admin/skus',
             '/admin/repackaging-formulas',
             '/admin/repackaging-batches',
+            '/admin/finished-goods-receipts',
             '/admin/dispatches',
             '/admin/stock-dashboard',
             '/admin/audit-logs',

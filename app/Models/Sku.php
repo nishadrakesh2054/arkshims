@@ -22,6 +22,7 @@ class Sku extends Model
         'sku_code',
         'is_active',
         'minimum_stock',
+        'packs_per_carton',
     ];
 
     /**
@@ -33,6 +34,7 @@ class Sku extends Model
             'weight' => 'float',
             'is_active' => 'boolean',
             'minimum_stock' => 'integer',
+            'packs_per_carton' => 'integer',
         ];
     }
 

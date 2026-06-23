@@ -2,6 +2,8 @@
 
 use App\Models\Dispatch;
 use App\Models\DispatchItem;
+use App\Models\FinishedGoodsBatch;
+use App\Models\FinishedGoodsReceipt;
 use App\Models\FinishedGoodsTransaction;
 use App\Models\InventoryTransaction;
 use App\Models\MaterialReceipt;
@@ -24,10 +26,11 @@ beforeEach(function (): void {
 
 it('seeds sample data for all modules', function (): void {
     expect(User::query()->count())->toBe(1)
-        ->and(Sku::query()->count())->toBe(6)
+        ->and(Sku::query()->count())->toBe(9)
         ->and(RepackagingFormula::query()->count())->toBe(6)
         ->and(RepackagingBatch::query()->count())->toBe(5)
         ->and(MaterialReceipt::query()->count())->toBe(3)
+        ->and(FinishedGoodsReceipt::query()->count())->toBe(2)
         ->and(InventoryTransaction::query()->where('type', 'IN')->count())->toBe(3)
         ->and(InventoryTransaction::query()->where('type', 'OUT')->count())->toBe(5);
 });
@@ -217,6 +220,87 @@ it('restores stock when a repackaging batch is deleted', function (): void {
     expect($coffee->fresh()->current_stock)->toBe($stockBefore);
 });
 
+it('receives chocolate cartons as FG IN with one batch per carton', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CH-STB-500')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $receipt = FinishedGoodsReceipt::query()->create([
+        'receipt_no' => 'FG-STB-TEST-001',
+        'sku_id' => $sku->id,
+        'cartons_count' => 3,
+        'packs_per_carton' => 20,
+        'carton_prefix' => 'STB',
+        'received_date' => now()->toDateString(),
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore + 60)
+        ->and($receipt->finishedGoodsBatches()->count())->toBe(3)
+        ->and(
+            FinishedGoodsBatch::query()
+                ->where('finished_goods_receipt_id', $receipt->id)
+                ->where('batch_no', 'STB-C001')
+                ->first()
+                ?->quantity
+        )->toBe(20)
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('reference_type', 'finished_goods_receipt')
+                ->where('reference_id', $receipt->id)
+                ->where('type', 'IN')
+                ->count()
+        )->toBe(3);
+});
+
+it('reverses chocolate stock when an FG carton receipt is deleted', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CH-VAN-400')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $receipt = FinishedGoodsReceipt::query()->create([
+        'receipt_no' => 'FG-VAN-TEST-DELETE',
+        'sku_id' => $sku->id,
+        'cartons_count' => 2,
+        'packs_per_carton' => 20,
+        'received_date' => now()->toDateString(),
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore + 40);
+
+    $receipt->delete();
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore)
+        ->and(FinishedGoodsBatch::query()->where('finished_goods_receipt_id', $receipt->id)->exists())->toBeFalse();
+});
+
+it('dispatches chocolate in loose packs and whole cartons', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CH-COC-500')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+    $carton = FinishedGoodsBatch::query()
+        ->where('sku_id', $sku->id)
+        ->where('batch_no', 'COC-C002')
+        ->firstOrFail();
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'TEST-CH-DISP',
+        'customer_name' => 'Chocolate Shop',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 4,
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'finished_goods_batch_id' => $carton->id,
+        'quantity' => 20,
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore - 24);
+});
+
 it('allows admin to access key filament pages', function (string $path): void {
     $this->actingAs($this->admin)
         ->get($path)
@@ -231,5 +315,6 @@ it('allows admin to access key filament pages', function (string $path): void {
     'repackaging batches' => '/admin/repackaging-batches',
     'stock adjustments' => '/admin/stock-adjustments',
     'dispatches' => '/admin/dispatches',
+    'fg carton receipts' => '/admin/finished-goods-receipts',
     'audit log' => '/admin/audit-logs',
 ]);
