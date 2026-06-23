@@ -12,6 +12,8 @@ use App\Models\RepackagingBatch;
 use App\Models\RepackagingFormula;
 use App\Models\Sku;
 use App\Models\StockAdjustment;
+use App\Models\Supplier;
+use App\Models\Unit;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,8 +33,10 @@ it('seeds sample data for all modules', function (): void {
         ->and(RepackagingBatch::query()->count())->toBe(5)
         ->and(MaterialReceipt::query()->count())->toBe(3)
         ->and(FinishedGoodsReceipt::query()->count())->toBe(2)
+        ->and(StockAdjustment::query()->count())->toBe(2)
         ->and(InventoryTransaction::query()->where('type', 'IN')->count())->toBe(3)
-        ->and(InventoryTransaction::query()->where('type', 'OUT')->count())->toBe(5);
+        ->and(InventoryTransaction::query()->where('type', 'OUT')->count())->toBe(5)
+        ->and(InventoryTransaction::query()->where('type', 'ADJUSTMENT')->count())->toBe(1);
 });
 
 it('calculates raw material stock after receipts and repackaging', function (): void {
@@ -42,7 +46,7 @@ it('calculates raw material stock after receipts and repackaging', function (): 
     // IN: 500 + 300 coffee | OUT: 200*0.05 + 100*0.10 + 500*0.01(creamer only for creamer) + ...
     // Coffee OUT: 10 + 10 + 12 = 32
     // Creamer OUT: 5 + 10 = 15
-    expect($coffee->current_stock)->toBe(768.0)
+    expect($coffee->current_stock)->toBe(766.0)
         ->and($creamer->current_stock)->toBe(235.0);
 });
 
@@ -318,3 +322,209 @@ it('allows admin to access key filament pages', function (string $path): void {
     'fg carton receipts' => '/admin/finished-goods-receipts',
     'audit log' => '/admin/audit-logs',
 ]);
+
+it('creates material receipt and records raw IN transaction', function (): void {
+    $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->firstOrFail();
+    $supplier = Supplier::query()->firstOrFail();
+    $kg = Unit::query()->where('symbol', 'kg')->firstOrFail();
+    $stockBefore = $coffee->current_stock;
+
+    $receipt = MaterialReceipt::query()->create([
+        'raw_material_id' => $coffee->id,
+        'supplier_id' => $supplier->id,
+        'batch_no' => 'TEST-RECEIPT-001',
+        'qty' => 100,
+        'unit_id' => $kg->id,
+        'received_date' => now()->toDateString(),
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore + 100)
+        ->and(
+            InventoryTransaction::query()
+                ->where('type', 'IN')
+                ->where('reference_type', 'material_receipt')
+                ->where('reference_id', $receipt->id)
+                ->first()
+                ->base_qty
+        )->toEqualWithDelta(100.0, 0.0001);
+
+    $receipt->delete();
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore);
+});
+
+it('creates stock adjustment for finished goods', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $adjustment = StockAdjustment::query()->create([
+        'stock_type' => 'finished_goods',
+        'sku_id' => $sku->id,
+        'direction' => 'decrease',
+        'qty' => 3,
+        'reason' => 'Damaged packs removed',
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore - 3)
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('type', 'ADJUSTMENT')
+                ->where('reference_type', 'stock_adjustment')
+                ->where('reference_id', $adjustment->id)
+                ->exists()
+        )->toBeTrue();
+
+    $adjustment->delete();
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore);
+});
+
+it('runs inventory category workflow from receipt to adjustment', function (): void {
+    $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->firstOrFail();
+    $supplier = Supplier::query()->firstOrFail();
+    $kg = Unit::query()->where('symbol', 'kg')->firstOrFail();
+    $stockBefore = $coffee->current_stock;
+
+    $receipt = MaterialReceipt::query()->create([
+        'raw_material_id' => $coffee->id,
+        'supplier_id' => $supplier->id,
+        'batch_no' => 'WF-INV-RECEIPT',
+        'qty' => 50,
+        'unit_id' => $kg->id,
+        'received_date' => now()->toDateString(),
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore + 50);
+
+    $adjustment = StockAdjustment::query()->create([
+        'stock_type' => 'raw_material',
+        'raw_material_id' => $coffee->id,
+        'direction' => 'increase',
+        'qty' => 5,
+        'reason' => 'Found extra bags in warehouse',
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($stockBefore + 55)
+        ->and(
+            InventoryTransaction::query()
+                ->where('reference_type', 'material_receipt')
+                ->where('reference_id', $receipt->id)
+                ->exists()
+        )->toBeTrue()
+        ->and(
+            InventoryTransaction::query()
+                ->where('reference_type', 'stock_adjustment')
+                ->where('reference_id', $adjustment->id)
+                ->exists()
+        )->toBeTrue();
+});
+
+it('runs production category workflow from repackaging batch', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->first();
+    $rawBefore = $coffee->current_stock;
+    $fgBefore = $sku->current_stock;
+
+    $batch = RepackagingBatch::query()->create([
+        'sku_id' => $sku->id,
+        'batch_no' => 'WF-PROD-BATCH',
+        'quantity' => 40,
+        'repackaged_date' => now()->toDateString(),
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($rawBefore - 2.0)
+        ->and($sku->fresh()->current_stock)->toBe($fgBefore + 40)
+        ->and($batch->finishedGoodsBatch)->not->toBeNull()
+        ->and(
+            InventoryTransaction::query()
+                ->where('type', 'OUT')
+                ->where('reference_type', 'repackaging_batch')
+                ->where('reference_id', $batch->id)
+                ->exists()
+        )->toBeTrue()
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('type', 'IN')
+                ->where('reference_type', 'repackaging_batch')
+                ->where('reference_id', $batch->id)
+                ->exists()
+        )->toBeTrue();
+});
+
+it('runs sales category workflow from dispatch', function (): void {
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $stockBefore = $sku->current_stock;
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'WF-SALES-DISP',
+        'customer_name' => 'Workflow Test Retailer',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 15,
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($stockBefore - 15)
+        ->and(
+            FinishedGoodsTransaction::query()
+                ->where('type', 'OUT')
+                ->where('reference_type', 'dispatch')
+                ->where('reference_id', $dispatch->id)
+                ->first()
+                ->qty
+        )->toBe(15);
+});
+
+it('runs full end to end workflow across inventory production and sales', function (): void {
+    $coffee = RawMaterial::query()->where('name', 'Coffee Bulk')->firstOrFail();
+    $sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+    $supplier = Supplier::query()->firstOrFail();
+    $kg = Unit::query()->where('symbol', 'kg')->firstOrFail();
+
+    $rawStart = $coffee->current_stock;
+    $fgStart = $sku->current_stock;
+
+    MaterialReceipt::query()->create([
+        'raw_material_id' => $coffee->id,
+        'supplier_id' => $supplier->id,
+        'batch_no' => 'E2E-RAW-IN',
+        'qty' => 20,
+        'unit_id' => $kg->id,
+        'received_date' => now()->toDateString(),
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($rawStart + 20);
+
+    RepackagingBatch::query()->create([
+        'sku_id' => $sku->id,
+        'batch_no' => 'E2E-REPACK',
+        'quantity' => 10,
+        'repackaged_date' => now()->toDateString(),
+    ]);
+
+    expect($coffee->fresh()->current_stock)->toBe($rawStart + 19.5)
+        ->and($sku->fresh()->current_stock)->toBe($fgStart + 10);
+
+    $dispatch = Dispatch::query()->create([
+        'dispatch_no' => 'E2E-DISPATCH',
+        'customer_name' => 'End-to-End Customer',
+        'dispatched_date' => now()->toDateString(),
+    ]);
+
+    DispatchItem::query()->create([
+        'dispatch_id' => $dispatch->id,
+        'sku_id' => $sku->id,
+        'quantity' => 8,
+    ]);
+
+    expect($sku->fresh()->current_stock)->toBe($fgStart + 2)
+        ->and(
+            InventoryTransaction::query()->where('type', 'IN')->where('reference_type', 'material_receipt')->whereHas('rawMaterial', fn ($q) => $q->where('name', 'Coffee Bulk'))->latest('id')->first()
+        )->not->toBeNull()
+        ->and(
+            FinishedGoodsTransaction::query()->where('type', 'OUT')->where('reference_type', 'dispatch')->where('reference_id', $dispatch->id)->exists()
+        )->toBeTrue();
+});

@@ -13,6 +13,7 @@ use App\Models\RawMaterial;
 use App\Models\RepackagingBatch;
 use App\Models\RepackagingFormula;
 use App\Models\Sku;
+use App\Models\StockAdjustment;
 use App\Models\Supplier;
 use App\Models\Unit;
 use Illuminate\Database\Seeder;
@@ -326,6 +327,26 @@ class ImsSampleDataSeeder extends Seeder
                 'carton_prefix' => 'COC',
                 'received_date' => now()->subDays(2)->toDateString(),
                 'remarks' => '32 cartons × 20 packs coconut chocolate',
+            ]);
+        }
+
+        if (StockAdjustment::query()->doesntExist()) {
+            $pouch50Sku = Sku::query()->where('sku_code', 'SKU-CG-50')->firstOrFail();
+
+            StockAdjustment::query()->create([
+                'stock_type' => 'raw_material',
+                'raw_material_id' => $coffeeBulk->id,
+                'direction' => 'decrease',
+                'qty' => 2,
+                'reason' => 'Sample count variance — coffee spill during transfer',
+            ]);
+
+            StockAdjustment::query()->create([
+                'stock_type' => 'finished_goods',
+                'sku_id' => $pouch50Sku->id,
+                'direction' => 'increase',
+                'qty' => 5,
+                'reason' => 'Sample recount — found extra pouches on shelf',
             ]);
         }
 
