@@ -2,7 +2,9 @@
 
 namespace App\Filament\Support;
 
+use Filament\Support\Enums\Width;
 use Filament\Tables\Enums\FiltersLayout;
+use Filament\Tables\Enums\FiltersResetActionPosition;
 use Filament\Tables\Table;
 
 class ImsTable
@@ -11,12 +13,10 @@ class ImsTable
     {
         return $table
             ->striped()
-            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
-            ->filtersFormColumns([
-                'default' => 1,
-                'sm' => 2,
-                'lg' => 3,
-            ])
+            ->filtersLayout(FiltersLayout::Dropdown)
+            ->filtersFormColumns(1)
+            ->filtersFormWidth(Width::Large)
+            ->filtersResetActionPosition(FiltersResetActionPosition::Footer)
             ->deferFilters()
             ->persistFiltersInSession()
             ->paginationPageOptions([10, 25, 50, 100])

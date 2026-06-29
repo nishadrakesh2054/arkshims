@@ -1,0 +1,117 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+@theme {
+    --color-brand-50: #eff8ff;
+    --color-brand-100: #dbeefe;
+    --color-brand-500: #209aea;
+    --color-brand-600: #0d7fd4;
+    --color-brand-700: #0b6ab3;
+}
+
+/* Page shell */
+.fi-body {
+    @apply bg-[#f3f7fb];
+}
+
+.dark .fi-body {
+    @apply bg-gray-950;
+}
+
+/* Sidebar */
+.fi-sidebar.fi-sidebar-open {
+    @apply border-e border-primary-100/80 bg-linear-to-b from-white via-white to-primary-50/40;
+}
+
+.dark .fi-sidebar.fi-sidebar-open {
+    @apply border-white/10 bg-linear-to-b from-gray-900 via-gray-900 to-gray-950;
+}
+
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    @apply bg-primary-50 shadow-xs ring-1 ring-primary-100;
+}
+
+.dark .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    @apply bg-primary-500/10 ring-primary-500/25;
+}
+
+.fi-sidebar-item.fi-active > .fi-sidebar-item-btn > .fi-sidebar-item-label {
+    @apply font-semibold;
+}
+
+/* Brand mark */
+.fi-logo {
+    @apply text-[1.35rem] tracking-tight text-primary-700;
+}
+
+.dark .fi-logo {
+    @apply text-primary-400;
+}
+
+/* Top bar */
+.fi-topbar {
+    @apply border-b-2 border-primary-500/15 bg-white/90 backdrop-blur-md;
+}
+
+.dark .fi-topbar {
+    @apply border-primary-400/20 bg-gray-900/90;
+}
+
+/* Login & simple pages */
+.fi-simple-layout {
+    @apply bg-linear-to-br from-primary-50 via-white to-sky-50;
+}
+
+.dark .fi-simple-layout {
+    @apply from-gray-950 via-gray-900 to-slate-950;
+}
+
+.fi-simple-main {
+    @apply rounded-2xl border border-primary-100/70 shadow-lg shadow-primary-500/5;
+}
+
+.dark .fi-simple-main {
+    @apply border-white/10 shadow-none;
+}
+
+/* Primary actions */
+.fi-btn.fi-color-primary {
+    @apply shadow-sm shadow-primary-500/20;
+}
+
+/* Stats & dashboard cards */
+.fi-wi-stats-overview-stat {
+    @apply rounded-xl border border-gray-200/80 bg-white shadow-xs;
+}
+
+.dark .fi-wi-stats-overview-stat {
+    @apply border-white/10 bg-gray-900;
+}
+
+/* Keep filter funnel fixed beside search in toolbar */
+.fi-ta-ctn .fi-ta-header-toolbar > :nth-child(2) {
+    @apply flex items-center gap-3;
+}
+
+.fi-ta-ctn .fi-ta-filters-dropdown {
+    @apply shrink-0;
+}
+
+.fi-ta-ctn .fi-ta-search-field {
+    @apply min-w-56;
+}
+
+/* Spacious filter dropdown panel below funnel */
+.fi-ta-ctn .fi-ta-filters-dropdown .fi-ta-filters {
+    @apply min-w-80 gap-y-5;
+}
+
+.fi-ta-ctn .fi-ta-filters-dropdown .fi-ta-filters-header {
+    @apply border-b border-gray-100 pb-3 dark:border-white/10;
+}
+
+.fi-ta-ctn .fi-ta-filters-dropdown .fi-ta-filters-actions-ctn {
+    @apply border-t border-gray-100 pt-4 dark:border-white/10;
+}

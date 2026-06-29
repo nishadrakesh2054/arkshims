@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,6 +11,7 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -27,14 +29,21 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->brandName('Arksh IMS ')
+            ->brandName(config('app.name'))
+            ->font('Plus Jakarta Sans')
+            ->monoFont('JetBrains Mono')
+            ->defaultThemeMode(ThemeMode::Light)
             ->colors([
-                'primary' => Color::Slate,
-                'success' => Color::Emerald,
-                'warning' => Color::Amber,
-                'danger' => Color::Rose,
-                'info' => Color::Sky,
+                'primary' => Color::hex('#209AEA'),
+                'gray' => Color::Zinc,
+                'success' => Color::hex('#16A34A'),
+                'warning' => Color::hex('#D97706'),
+                'danger' => Color::hex('#DC2626'),
+                'info' => Color::hex('#0284C7'),
             ])
+            ->viteTheme('resources/css/filament/admin/theme.css')
+            ->maxContentWidth(Width::Full)
+            ->simplePageMaxContentWidth(Width::Small)
             ->sidebarCollapsibleOnDesktop()
             ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
             ->navigationGroups([
